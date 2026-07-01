@@ -1,19 +1,22 @@
 // Copyright (C) Duncan Greenwood 2026 (duncan_greenwood@hotmail.com)
-// This file is part of VLCB-Arduino project on
+// This file is part of VLCB-Arduino project on:
 // https://github.com/SvenRosvall/VLCB-Arduino Licensed under the Creative
-// Commons Attribution-NonCommercial-ShareAlike 4.0 International License. The
-// full licence can be found at:
+// Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+// The full licence can be found at:
 // http://creativecommons.org/licenses/by-nc-sa/4.0/
 
 /// notes:
 /// the twai_frame_t structure does not contain space for the data payload
 /// a buffer must be allocated when creating a message
-/// and freed when a message goes out of scope
+/// and freed once a message goes out of scope - either successfully
+/// transmitted or failed
 /// this reduces memory use and improves performance by minimising data copying
 
-// 3rd party libraries
+/// any pair of GPIO pins may be used for CAN RX and TX
+/// they do not have to be consecutive
 
-#include <Streaming.h>
+///////
+
 #include <VCANESP32.h>
 
 ///
@@ -23,14 +26,18 @@
 namespace VLCB {
 
 /// these free functions are used as callbacks from the TWAI driver to the
-/// application the VCANESP32 object instance pointer (this) is passed as the
+/// application
+
+/// they are pinned in IRAM for better performance
+
+/// the VCANESP32 object instance pointer (this) is passed as the
 /// user data context arg 'user_ctx'
 
 //
 /// message receive callback
 /// called by the TWAI driver in interrupt context whenever a new CAN message is
-/// received from the bus pinned in IRAM for better performance place the
-/// message in the receive queue
+/// received from the bus
+/// we allocate the data buffer abd place the message in the receive queue
 //
 
 static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
@@ -62,8 +69,8 @@ static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
 //
 /// message transmit callback
 /// called by the TWAI driver in interrupt context whenever a CAN message has
-/// been successfully transmitted to the bus pinned in IRAM for better
-/// performance free the dynamically allocated data buffer
+/// been successfully transmitted to the bus or fails
+/// we free the dynamically allocated data buffer
 //
 
 static bool IRAM_ATTR twai_tx_callback(twai_node_handle_t handle,
@@ -80,28 +87,41 @@ static bool IRAM_ATTR twai_tx_callback(twai_node_handle_t handle,
 //
 /// error callback
 /// called by the TWAI driver in interrupt context if an error occurs
-/// pinned in IRAM for better performance
 //
 
 static bool IRAM_ATTR twai_error_callback(twai_node_handle_t handle,
                                           const twai_error_event_data_t* edata,
                                           void* user_ctx) {
+  VCANESP32* vcanesp32_instance_ptr = (VCANESP32*)user_ctx;
+
   Serial.printf("error twai_error_callback, error = %lu\n",
                 edata->err_flags.val);
+
+  if (vcanesp32_instance_ptr->error_callback != nullptr) {
+    (void)(*vcanesp32_instance_ptr->error_callback)(edata, user_ctx);
+  }
+
   return false;
 }
 
 //
 /// state change callback
 /// called by the TWAI driver in interrupt context whenever a state change
-/// occurs pinned in IRAM for better performance
+/// occurs
 //
 
 static bool IRAM_ATTR twai_state_change_callback(
     twai_node_handle_t handle, const twai_state_change_event_data_t* edata,
     void* user_ctx) {
+  VCANESP32* vcanesp32_instance_ptr = (VCANESP32*)user_ctx;
+
   Serial.printf("info: twai_state_change_callback, from %u to %u\n",
                 edata->old_sta, edata->new_sta);
+
+  if (vcanesp32_instance_ptr->state_change_callback != nullptr) {
+    (void)(*vcanesp32_instance_ptr->state_change_callback)(edata, user_ctx);
+  }
+
   return false;
 }
 
@@ -110,15 +130,11 @@ static bool IRAM_ATTR twai_state_change_callback(
 /// with or without IO pins specified
 //
 
-VCANESP32::VCANESP32() {
-  _num_rx_buffers = rx_qsize;
-  _num_tx_buffers = tx_qsize;
-}
+VCANESP32::VCANESP32() { setDefaults(); }
 
 VCANESP32::VCANESP32(byte gpio_tx, byte gpio_rx)
     : _gpio_tx(gpio_tx), _gpio_rx(gpio_rx) {
-  _num_rx_buffers = rx_qsize;
-  _num_tx_buffers = tx_qsize;
+  setDefaults();
 }
 
 //
@@ -128,6 +144,17 @@ VCANESP32::VCANESP32(byte gpio_tx, byte gpio_rx)
 VCANESP32::~VCANESP32() {
   twai_node_disable(twai_node_handle);
   twai_node_delete(twai_node_handle);
+}
+
+//
+/// set default member values when object is constructed
+//
+
+void VCANESP32::setDefaults(void) {
+  _num_rx_buffers = rx_qsize;
+  _num_tx_buffers = tx_qsize;
+  error_callback = nullptr;
+  state_change_callback = nullptr;
 }
 
 //
@@ -189,18 +216,18 @@ bool VCANESP32::begin() {
       ESP_OK) {
     // register the receive event callback (before starting the controller)
 
-    twai_event_callbacks_t user_cbs;
-    bzero(&user_cbs, sizeof(twai_event_callbacks_t));
-    user_cbs.on_rx_done = twai_rx_callback;
-    user_cbs.on_tx_done = twai_tx_callback;
-    user_cbs.on_state_change = twai_state_change_callback;
-    user_cbs.on_error = twai_error_callback;
+    twai_event_callbacks_t user_callbacks;
+    bzero(&user_callbacks, sizeof(twai_event_callbacks_t));
+    user_callbacks.on_rx_done = twai_rx_callback;
+    user_callbacks.on_tx_done = twai_tx_callback;
+    user_callbacks.on_state_change = twai_state_change_callback;
+    user_callbacks.on_error = twai_error_callback;
 
     // we pass a pointer to this object instance as user context data
     // this gives the message receive callback access to the receive queue
     // handle
 
-    twai_node_register_event_callbacks(twai_node_handle, &user_cbs, this);
+    twai_node_register_event_callbacks(twai_node_handle, &user_callbacks, this);
 
     // start the TWAI driver instance
 
@@ -221,6 +248,7 @@ bool VCANESP32::begin() {
 //
 
 bool VCANESP32::available() {
+  // capture stats
   static unsigned long last_stats_captured_at = 0;
 
   if (millis() - last_stats_captured_at >= 1000) {
@@ -246,8 +274,8 @@ CANFrame VCANESP32::getNextCanFrame(void) {
     frame.rtr = rx_msg.header.rtr;
     memcpy(frame.data, rx_msg.buffer, rx_msg.buffer_len);
 
-    // free the frame data buffer - this was allocated in the rx callback
-    // function
+    // free the frame data buffer
+    // this was allocated in the rx callback function
     free(rx_msg.buffer);
 
     ++_numMsgsRcvd;
@@ -303,6 +331,20 @@ void VCANESP32::printStatus() {
 void VCANESP32::reset() {
   twai_node_recover(twai_node_handle);
   return;
+}
+
+//
+/// set callback functions
+//
+
+void VCANESP32::setErrorCallback(
+    void (*fptr)(const twai_error_event_data_t* edata, void* user_ctx)) {
+  error_callback = fptr;
+}
+
+void VCANESP32::setStateChangeCallback(
+    void (*fptr)(const twai_state_change_event_data_t* edata, void* user_ctx)) {
+  state_change_callback = fptr;
 }
 
 //

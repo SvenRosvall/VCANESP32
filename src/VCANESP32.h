@@ -92,6 +92,8 @@ class VCANESP32 : public CanTransport {
   /// transmit and 32 for receive.
   void setNumBuffers(unsigned int num_rx_buffers, unsigned int num_tx_buffers);
 
+  void setDefaults(void);
+
   /// \cond
 
   void printStatus(void);
@@ -108,12 +110,23 @@ class VCANESP32 : public CanTransport {
 
   QueueHandle_t
       rx_queue_handle;  // received message queue, using FreeRTOS queue API
-  twai_node_handle_t twai_node_handle;  // TWAI driver instance handle
+  twai_node_handle_t twai_node_handle;  // TWAI driver instance 
+
+  // user definable callbacks allow the application to handle errors and
+  // state changes
+
+  void (*error_callback)(const twai_error_event_data_t* edata, void* user_ctx);
+  void (*state_change_callback)(const twai_state_change_event_data_t* edata,
+                                void* user_ctx);
+
+  void setErrorCallback(void (*fptr)(const twai_error_event_data_t* edata,
+                                     void* user_ctx));
+  void setStateChangeCallback(
+      void (*fptr)(const twai_state_change_event_data_t* edata, void* user_ctx));
 
   /// \endcond
  private:
   void captureTWAIStats();
-
   unsigned int _numMsgsSent, _numMsgsRcvd, _numSendErr, _numRecvErr, _hwmRx,
       _hwmTx;
   unsigned int _num_rx_buffers, _num_tx_buffers;
