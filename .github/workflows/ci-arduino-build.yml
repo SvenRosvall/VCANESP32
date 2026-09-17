@@ -53,10 +53,10 @@ jobs:
       - name: Compile all examples for ${{ matrix.label }}
         run: |
           results=""
-          #for dir in ./examples/*; do
+          #for dir in ./Examples/*; do
           # TODO: Expand the list of examples as they are completed.
           # So far only one example sketch is ready.
-          for dir in ./examples/VLCB_4in4out_ESP32_s; do
+          for dir in ./Examples/VLCB_4in4out_ESP32_s; do
             if [ -d "$dir" ] && ls "$dir"/*.ino >/dev/null 2>&1; then
               exname=$(basename "$dir")
               echo "Compiling $dir"
