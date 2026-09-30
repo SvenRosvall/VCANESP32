@@ -112,7 +112,7 @@ class VCANESP32 : public CanTransport {
 
   QueueHandle_t
       rx_queue_handle;  // received message queue, using FreeRTOS queue API
-  twai_node_handle_t twai_node_handle;  // TWAI driver instance 
+  // twai_node_handle_t twai_node_handle;  // TWAI driver instance 
 
   // user definable callbacks allow the application to handle errors and
   // state changes
@@ -133,6 +133,12 @@ class VCANESP32 : public CanTransport {
       _hwmTx;
   unsigned int _num_rx_buffers, _num_tx_buffers;
   byte _gpio_tx, _gpio_rx;
+
+  twai_node_handle_t twai_node_handle;
+  twai_node_status_t node_status;
+  twai_node_record_t node_statistics;
+  twai_error_state_t node_error_state;
+  uint32_t node_bus_num_errs;
 };
 
 }  // namespace VLCB

@@ -54,9 +54,8 @@ static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
   // receive the frame from the TWAI driver and add to the receive queue
 
   if (twai_node_receive_from_isr(handle, &rx_frame) == ESP_OK) {
-    if (xQueueSendFromISR(vcanesp32_instance_ptr->rx_queue_handle, &rx_frame,
-                          NULL) != pdPASS) {
-      Serial.printf("error: twai_rx_callback: unable to queue message");
+    if (xQueueSend(vcanesp32_instance_ptr->rx_queue_handle, &rx_frame, (TickType_t)0) != pdPASS) {
+      Serial.printf("error: twai_rx_callback: unable to queue received message");
     }
   } else {
     Serial.printf(
@@ -155,6 +154,7 @@ void VCANESP32::setDefaults(void) {
   _num_tx_buffers = tx_qsize;
   error_callback = nullptr;
   state_change_callback = nullptr;
+  twai_node_handle = nullptr;
 }
 
 //
@@ -196,6 +196,11 @@ bool VCANESP32::begin() {
 
   rx_queue_handle = xQueueCreate(_num_rx_buffers, sizeof(twai_frame_t));
 
+  if (rx_queue_handle == NULL) {
+    Serial.printf("error: uanble to create receive buffer\n");
+    return false;
+  }
+
   /// initialise the TWAI driver
 
   twai_onchip_node_config_t twai_node_config;
@@ -210,7 +215,6 @@ bool VCANESP32::begin() {
   // create a new TWAI controller driver instance
 
   uint32_t ret = 0;
-  twai_node_handle_t twai_node_handle = NULL;
 
   if ((ret = twai_new_node_onchip(&twai_node_config, &twai_node_handle)) ==
       ESP_OK) {
@@ -233,12 +237,15 @@ bool VCANESP32::begin() {
 
     if ((ret = twai_node_enable(twai_node_handle)) != ESP_OK) {
       Serial.printf("error: twai_node_enable returns %lu\n", ret);
+    } else {
+      Serial.printf("twai_node_enable returns ESP_OK\n");
     }
 
   } else {
     Serial.printf("error: twai_new_node_onchip returns %lu\n", ret);
   }
 
+  Serial.printf("begin returns %u\n", (ret == ESP_OK));
   return (ret == ESP_OK);
 }
 
@@ -295,7 +302,7 @@ bool VCANESP32::sendCanFrame(CANFrame* frame) {
   // allocate the tx frame data buffer
   // this will be freed in the tx complete callback
 
-  tx_frame.buffer = (uint8_t*)calloc(frame->len, sizeof(uint8_t));
+  tx_frame.buffer = (uint8_t *)calloc(frame->len, sizeof(uint8_t));
 
   // populate the TWAI frame from from the VLCB message frame
 
@@ -308,10 +315,11 @@ bool VCANESP32::sendCanFrame(CANFrame* frame) {
 
   // send the frame - allow up to 500ms for tx queue space to become available
 
-  if ((ret = twai_node_transmit(twai_node_handle, &tx_frame, 500)) == ESP_OK) {
+  if ((ret = twai_node_transmit(twai_node_handle, &tx_frame, (TickType_t)500)) == ESP_OK) {
     ++_numMsgsSent;
   }
 
+  Serial.printf("sendCanFrame returns %u\n", (ret == ESP_OK));
   return (ret == ESP_OK);
 }
 
@@ -348,14 +356,10 @@ void VCANESP32::setStateChangeCallback(
 }
 
 //
-/// capture TWAI stats
+/// capture TWAI bus state and stats
 //
 
 void VCANESP32::captureTWAIStats() {
-  twai_node_status_t node_status;
-  twai_node_record_t node_statistics;
-  twai_error_state_t node_error_state;
-  uint32_t node_bus_err_num;
 
   if (twai_node_get_info(twai_node_handle, &node_status, &node_statistics) ==
       ESP_OK) {
@@ -363,11 +367,11 @@ void VCANESP32::captureTWAIStats() {
     _numRecvErr = node_status.rx_error_count;
 
     node_error_state = node_status.state;
-    node_bus_err_num = node_statistics.bus_err_num;
+    node_bus_num_errs = node_statistics.bus_err_num;
 
     if (node_error_state != TWAI_ERROR_ACTIVE) {
-      Serial.printf("error: bus state = %u, num errors = %lu\n",
-                    node_error_state, node_bus_err_num);
+      Serial.printf("error: captureTWAIStats: bus state = %u, num errors = %lu\n",
+                    node_error_state, node_bus_num_errs);
     }
   }
 
