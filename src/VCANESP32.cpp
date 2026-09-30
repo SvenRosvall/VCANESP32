@@ -299,10 +299,17 @@ bool VCANESP32::sendCanFrame(CANFrame* frame) {
   esp_err_t ret;
   twai_frame_t tx_frame;
 
+  // initialise the frame structure to zero
+
+  memset(&tx_frame, 0, sizeof(twai_frame_t));
+
   // allocate the tx frame data buffer
   // this will be freed in the tx complete callback
 
-  tx_frame.buffer = (uint8_t *)calloc(frame->len, sizeof(uint8_t));
+  if ((tx_frame.buffer = (uint8_t *)calloc(frame->len, sizeof(uint8_t))) == nullptr) {
+    Serial.printf("error allocating memory for twai frame\n");
+    return false;
+  }
 
   // populate the TWAI frame from from the VLCB message frame
 
