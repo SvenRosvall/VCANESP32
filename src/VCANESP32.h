@@ -53,8 +53,8 @@ namespace VLCB {
 
 // constants
 
-static const uint32_t tx_qsize = 32;
-static const uint32_t rx_qsize = 32;
+static const uint32_t TX_QSIZE = 32;
+static const uint32_t RX_QSIZE = 32;
 
 static const uint32_t CANBITRATE = 125000UL;  // 125Kb/s - fixed for VLCB
 static const size_t MAX_CAN_DATA_LEN = 8;     // max CAN data bytes
@@ -68,7 +68,7 @@ class VCANESP32 : public CanTransport {
  public:
   /// \cond
   VCANESP32();
-  VCANESP32(byte gpio_tx, byte gpio_rx);
+  VCANESP32(gpio_num_t gpio_tx, gpio_num_t gpio_rx);
   virtual ~VCANESP32();
 
   // these methods are declared virtual in the base class and must be
@@ -84,7 +84,7 @@ class VCANESP32 : public CanTransport {
   /// define here the connections to the CAN bus transceiver
   /// ensure that the ESP32 GPIO number is specified and NOT the physical device
   /// pin number
-  void setPins(byte tx_pin, byte rx_pin);
+  void setPins(int tx_pin, int rx_pin);
 
   /// there are two message buffer queues, one for transmit and one for receive.
   /// The larger the buffer, the more memory it uses. This function allows the
@@ -132,7 +132,7 @@ class VCANESP32 : public CanTransport {
   unsigned int _numMsgsSent, _numMsgsRcvd, _numSendErr, _numRecvErr, _hwmRx,
       _hwmTx;
   unsigned int _num_rx_buffers, _num_tx_buffers;
-  byte _gpio_tx, _gpio_rx;
+  gpio_num_t _gpio_tx, _gpio_rx;
 
   twai_node_handle_t twai_node_handle;
   twai_node_status_t node_status;

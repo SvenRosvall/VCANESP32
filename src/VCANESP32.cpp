@@ -131,7 +131,7 @@ static bool IRAM_ATTR twai_state_change_callback(
 
 VCANESP32::VCANESP32() { setDefaults(); }
 
-VCANESP32::VCANESP32(byte gpio_tx, byte gpio_rx)
+VCANESP32::VCANESP32(gpio_num_t gpio_tx, gpio_num_t gpio_rx)
     : _gpio_tx(gpio_tx), _gpio_rx(gpio_rx) {
   setDefaults();
 }
@@ -150,8 +150,8 @@ VCANESP32::~VCANESP32() {
 //
 
 void VCANESP32::setDefaults(void) {
-  _num_rx_buffers = rx_qsize;
-  _num_tx_buffers = tx_qsize;
+  _num_rx_buffers = RX_QSIZE;
+  _num_tx_buffers = TX_QSIZE;
   error_callback = nullptr;
   state_change_callback = nullptr;
   twai_node_handle = nullptr;
@@ -161,9 +161,9 @@ void VCANESP32::setDefaults(void) {
 /// explicitly set the IO pins to be used for CAN TX and RX
 //
 
-void VCANESP32::setPins(byte gpio_tx, byte gpio_rx) {
-  _gpio_tx = gpio_tx;
-  _gpio_rx = gpio_rx;
+void VCANESP32::setPins(int gpio_tx, int gpio_rx) {
+  _gpio_tx = (gpio_num_t)gpio_tx;
+  _gpio_rx = (gpio_num_t)gpio_rx;
 }
 
 //
@@ -179,7 +179,7 @@ void VCANESP32::setNumBuffers(unsigned int num_rx_buffers,
 }
 
 //
-/// initialise the TWAI driver, message queues and receive callback
+/// initialise the TWAI driver, message queues and callback functions
 //
 
 bool VCANESP32::begin() {
@@ -207,8 +207,8 @@ bool VCANESP32::begin() {
 
   bzero(&twai_node_config, sizeof(twai_onchip_node_config_t));
 
-  twai_node_config.io_cfg.tx = (gpio_num_t)_gpio_tx;
-  twai_node_config.io_cfg.rx = (gpio_num_t)_gpio_rx;
+  twai_node_config.io_cfg.tx = _gpio_tx;
+  twai_node_config.io_cfg.rx = _gpio_rx;
   twai_node_config.bit_timing.bitrate = CANBITRATE;
   twai_node_config.tx_queue_depth = _num_tx_buffers;
 
@@ -301,7 +301,7 @@ bool VCANESP32::sendCanFrame(CANFrame* frame) {
 
   // initialise the frame structure to zero
 
-  memset(&tx_frame, 0, sizeof(twai_frame_t));
+  bzero(&tx_frame, sizeof(twai_frame_t));
 
   // allocate the tx frame data buffer
   // this will be freed in the tx complete callback
