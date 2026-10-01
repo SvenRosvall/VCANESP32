@@ -45,6 +45,7 @@ static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
                                        void* user_ctx) {
   VCANESP32* vcanesp32_instance_ptr = (VCANESP32*)user_ctx;
   twai_frame_t rx_frame;
+  BaseType_t woken = pdFALSE;
 
   // allocate the frame data buffer
 
@@ -54,7 +55,7 @@ static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
   // receive the frame from the TWAI driver and add to the receive queue
 
   if (twai_node_receive_from_isr(handle, &rx_frame) == ESP_OK) {
-    if (xQueueSend(vcanesp32_instance_ptr->rx_queue_handle, &rx_frame, (TickType_t)0) != pdPASS) {
+    if (xQueueSendFromISR(vcanesp32_instance_ptr->rx_queue_handle, &rx_frame, &woken) != pdPASS) {
       Serial.printf("error: twai_rx_callback: unable to queue received message");
     }
   } else {
@@ -62,7 +63,7 @@ static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
         "error: twai_rx_callback: error receiving message from TWAI driver");
   }
 
-  return false;
+  return (woken == pdTRUE);
 }
 
 //
@@ -218,18 +219,19 @@ bool VCANESP32::begin() {
 
   if ((ret = twai_new_node_onchip(&twai_node_config, &twai_node_handle)) ==
       ESP_OK) {
-    // register the receive event callback (before starting the controller)
+
+    // register callback functions (before starting the controller)
 
     twai_event_callbacks_t user_callbacks;
     bzero(&user_callbacks, sizeof(twai_event_callbacks_t));
+
     user_callbacks.on_rx_done = twai_rx_callback;
     user_callbacks.on_tx_done = twai_tx_callback;
     user_callbacks.on_state_change = twai_state_change_callback;
     user_callbacks.on_error = twai_error_callback;
 
     // we pass a pointer to this object instance as user context data
-    // this gives the message receive callback access to the receive queue
-    // handle
+    // this gives the message receive callback access to the rx queue handle
 
     twai_node_register_event_callbacks(twai_node_handle, &user_callbacks, this);
 
@@ -304,7 +306,7 @@ bool VCANESP32::sendCanFrame(CANFrame* frame) {
   bzero(&tx_frame, sizeof(twai_frame_t));
 
   // allocate the tx frame data buffer
-  // this will be freed in the tx complete callback
+  // this will be freed in the tx completion callback
 
   if ((tx_frame.buffer = (uint8_t *)calloc(frame->len, sizeof(uint8_t))) == nullptr) {
     Serial.printf("error allocating memory for twai frame\n");
