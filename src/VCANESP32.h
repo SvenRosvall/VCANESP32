@@ -112,7 +112,6 @@ class VCANESP32 : public CanTransport {
 
   QueueHandle_t
       rx_queue_handle;  // received message queue, using FreeRTOS queue API
-  // twai_node_handle_t twai_node_handle;  // TWAI driver instance 
 
   // user definable callbacks allow the application to handle errors and
   // state changes

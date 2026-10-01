@@ -37,7 +37,7 @@ namespace VLCB {
 /// message receive callback
 /// called by the TWAI driver in interrupt context whenever a new CAN message is
 /// received from the bus
-/// we allocate the data buffer abd place the message in the receive queue
+/// we allocate the data buffer and place the message on the receive queue
 //
 
 static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
@@ -195,9 +195,7 @@ bool VCANESP32::begin() {
   // the tx queue is provided by the TWAI driver
   // the rx queue is provided by this library, using the FreeRTOS queue API
 
-  rx_queue_handle = xQueueCreate(_num_rx_buffers, sizeof(twai_frame_t));
-
-  if (rx_queue_handle == NULL) {
+  if ((rx_queue_handle = xQueueCreate(_num_rx_buffers, sizeof(twai_frame_t))) == NULL) {
     Serial.printf("error: uanble to create receive buffer\n");
     return false;
   }
@@ -272,7 +270,7 @@ bool VCANESP32::available() {
 /// get next CAN message, if a message is available in the queue
 //
 
-CANFrame VCANESP32::getNextCanFrame(void) {
+CANFrame VCANESP32::getNextCanFrame() {
   twai_frame_t rx_msg;
   CANFrame frame;
 
