@@ -118,8 +118,8 @@ void setupVLCB() {
   etService.setEventValidator(eventValidator);
 
   // configure and start CAN bus and VLCB message processing
-  vcanesp32.setNumBuffers(16, 4);  // more buffers = more memory used, fewer = less
-  vcanesp32.setPins(1, 0);         // select pins for CAN TX & RX
+  // vcanesp32.setNumBuffers(16, 4);  // more buffers = more memory used, fewer = less
+  vcanesp32.setPins(1, 0);  // select pins for CAN TX & RX
 
   if (!vcanesp32.begin()) {
     Serial << F("> error starting VLCB") << endl;

@@ -71,6 +71,8 @@ class VCANESP32 : public CanTransport {
   VCANESP32(gpio_num_t gpio_tx, gpio_num_t gpio_rx);
   virtual ~VCANESP32();
 
+  void setDefaults(void);
+
   // these methods are declared virtual in the base class and must be
   // implemented by the derived class
   bool begin();
@@ -91,8 +93,6 @@ class VCANESP32 : public CanTransport {
   /// user to specify the size of the buffers. the default size is 32 for
   /// transmit and 32 for receive.
   void setNumBuffers(unsigned int num_rx_buffers, unsigned int num_tx_buffers);
-
-  void setDefaults(void);
 
   /// \cond
 

@@ -5,6 +5,9 @@
 // The full licence can be found at:
 // http://creativecommons.org/licenses/by-nc-sa/4.0/
 
+/// espressif TWAI docs:
+/// https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/twai.html
+
 /// notes:
 /// the twai_frame_t structure does not contain space for the data payload
 /// a buffer must be allocated when creating a message
@@ -43,7 +46,7 @@ namespace VLCB {
 static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
                                        const twai_rx_done_event_data_t* edata,
                                        void* user_ctx) {
-  VCANESP32* vcanesp32_instance_ptr = (VCANESP32*)user_ctx;
+  VCANESP32 *vcanesp32_instance_ptr = (VCANESP32 *)user_ctx;
   twai_frame_t rx_frame;
   BaseType_t woken = pdFALSE;
 
@@ -57,6 +60,7 @@ static bool IRAM_ATTR twai_rx_callback(twai_node_handle_t handle,
   if (twai_node_receive_from_isr(handle, &rx_frame) == ESP_OK) {
     if (xQueueSendFromISR(vcanesp32_instance_ptr->rx_queue_handle, &rx_frame, &woken) != pdPASS) {
       Serial.printf("error: twai_rx_callback: unable to queue received message");
+      free(rx_frame.buffer);
     }
   } else {
     Serial.printf(
@@ -92,7 +96,7 @@ static bool IRAM_ATTR twai_tx_callback(twai_node_handle_t handle,
 static bool IRAM_ATTR twai_error_callback(twai_node_handle_t handle,
                                           const twai_error_event_data_t* edata,
                                           void* user_ctx) {
-  VCANESP32* vcanesp32_instance_ptr = (VCANESP32*)user_ctx;
+  VCANESP32 *vcanesp32_instance_ptr = (VCANESP32 *)user_ctx;
 
   Serial.printf("error twai_error_callback, error = %lu\n",
                 edata->err_flags.val);
@@ -113,7 +117,7 @@ static bool IRAM_ATTR twai_error_callback(twai_node_handle_t handle,
 static bool IRAM_ATTR twai_state_change_callback(
     twai_node_handle_t handle, const twai_state_change_event_data_t* edata,
     void* user_ctx) {
-  VCANESP32* vcanesp32_instance_ptr = (VCANESP32*)user_ctx;
+  VCANESP32 *vcanesp32_instance_ptr = (VCANESP32 *)user_ctx;
 
   Serial.printf("info: twai_state_change_callback, from %u to %u\n",
                 edata->old_sta, edata->new_sta);
@@ -211,9 +215,14 @@ bool VCANESP32::begin() {
   twai_node_config.bit_timing.bitrate = CANBITRATE;
   twai_node_config.tx_queue_depth = _num_tx_buffers;
 
+  twai_node_config.fail_retry_cnt = 5;      // range 0-15 or -1
+
+  twai_node_config.io_cfg.quanta_clk_out = (gpio_num_t)-1;
+  twai_node_config.io_cfg.bus_off_indicator = (gpio_num_t)-1;
+
   // create a new TWAI controller driver instance
 
-  uint32_t ret = 0;
+  esp_err_t ret = 0;
 
   if ((ret = twai_new_node_onchip(&twai_node_config, &twai_node_handle)) ==
       ESP_OK) {
@@ -236,13 +245,13 @@ bool VCANESP32::begin() {
     // start the TWAI driver instance
 
     if ((ret = twai_node_enable(twai_node_handle)) != ESP_OK) {
-      Serial.printf("error: twai_node_enable returns %lu\n", ret);
+      Serial.printf("error: twai_node_enable returns %u\n", ret);
     } else {
       Serial.printf("twai_node_enable returns ESP_OK\n");
     }
 
   } else {
-    Serial.printf("error: twai_new_node_onchip returns %lu\n", ret);
+    Serial.printf("error: twai_new_node_onchip returns %u\n", ret);
   }
 
   Serial.printf("begin returns %u\n", (ret == ESP_OK));
